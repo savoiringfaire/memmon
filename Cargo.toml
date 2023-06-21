@@ -1,0 +1,20 @@
+[package]
+name = "memmon"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.26"
+anyhow = "1.0.71"
+sysinfo = "0.29.2"
+structopt = { version = "0.3" }
+parse_duration = "2.1.1"
+cli-table = "0.4"
+
+[[bin]]
+name = "memmon"
+
+[[bin]]
+name = "memmon-view"
