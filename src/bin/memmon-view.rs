@@ -1,16 +1,15 @@
+use chrono::{NaiveDateTime};
 use memmon::{Record, ProcessInfo};
 use structopt::StructOpt;
 use std::fs::File;
 use anyhow::{anyhow, Result};
 use std::io::{BufReader, BufRead};
 use std::str::FromStr;
-use cli_table::{format::Justify, print_stdout, Cell, Style, Table, CellStruct};
+use cli_table::{print_stdout, Cell, Style, Table, CellStruct};
 use std::cmp;
 
 fn pretty_print_bytes(num: u64) -> String {
     let units = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-
-    let delimiter: u64 = 1000;
 
     let exponent = cmp::min(((num as f64).log10().floor() / 3_f64) as u64, units.len() as u64 - 1);
 
@@ -24,10 +23,6 @@ fn pretty_print_bytes(num: u64) -> String {
 
 #[derive(Debug, StructOpt)]
 struct Config {
-    /// Activate debug mode
-    #[structopt(short, long)]
-    debug: bool,
-
     /// Output file
     #[structopt(short, long, default_value = "process_memory.log")]
     infile: String,
@@ -39,6 +34,10 @@ struct Config {
     /// Display only the top n processes by RSS
     #[structopt(short, long)]
     limit: Option<i32>,
+
+    /// Truncate the cmd output to prevent huge tables
+    #[structopt(long, default_value = "80")]
+    truncate_cmd: usize,
 }
 
 struct Parser {
@@ -78,18 +77,24 @@ impl Parser {
         // TODO: Move this into a from_str function on Record
         let parts: Vec<&str> = line.split(",").collect();
 
-        if parts.len() != 4 {
+        if parts.len() != 7 {
             return Err(anyhow!("Bad event line, not enough parts: {}", line));
         }
 
         let name = parts[0].to_string();
-        let pid = parts[1].parse()?;
-        let resident_memory = parts[2].parse()?;
-        let virtual_memory = parts[3].parse()?;
+        let cmd = parts[1].to_string();
+        let parent = parts[2].parse()?;
+        let start_time = parts[3].parse()?;
+        let pid = parts[4].parse()?;
+        let resident_memory = parts[5].parse()?;
+        let virtual_memory = parts[6].parse()?;
 
         if let Some(record) = &mut self.current_record {
             record.add_process(ProcessInfo{
                 name,
+                cmd,
+                parent,
+                start_time,
                 pid,
                 resident_memory,
                 virtual_memory,
@@ -148,9 +153,15 @@ fn main() -> Result<()> {
         for process in processes {
             let mut row: Vec<CellStruct> = vec![];
 
-            row.push(process.name.clone().cell());
+            let mut cmd = process.cmd.clone();
+            cmd.truncate(config.truncate_cmd);
+
+            row.push(cmd.cell());
             row.push(pretty_print_bytes(process.resident_memory.clone()).cell());
             row.push(pretty_print_bytes(process.virtual_memory.clone()).cell());
+            row.push(process.pid.cell());
+            row.push(process.parent.cell());
+            row.push(NaiveDateTime::from_timestamp(process.start_time.try_into().unwrap(), 0).to_string().cell());
 
             table_vec.push(row);
         }
@@ -160,6 +171,9 @@ fn main() -> Result<()> {
                    "Name",
                    "RSS",
                    "Virt",
+                   "PID",
+                   "Parent",
+                   "Start Time",
             ])
             .bold(true);
 

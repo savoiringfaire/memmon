@@ -1,12 +1,15 @@
-use sysinfo::{ProcessExt, PidExt, Process};
+use sysinfo::{ProcessExt, PidExt, Process, Pid};
 use chrono::{Utc, DateTime};
 
 #[derive(Clone)]
 pub struct ProcessInfo {
+    pub name: String,
     pub pid: u32,
+    pub cmd: String,
+    pub parent: u32,
+    pub start_time: u64,
     pub resident_memory: u64,
     pub virtual_memory: u64,
-    pub name: String,
 }
 
 impl From<&Process> for ProcessInfo {
@@ -14,6 +17,9 @@ impl From<&Process> for ProcessInfo {
         Self {
             name: process.name().to_string(),
             pid: process.pid().as_u32(),
+            cmd: process.cmd().join(" ").to_string().replace(",", "_").replace("\n", ""),
+            parent: process.parent().unwrap_or(Pid::from(0)).as_u32(),
+            start_time: process.start_time(),
             resident_memory: process.memory(),
             virtual_memory: process.virtual_memory()
         }
@@ -22,7 +28,7 @@ impl From<&Process> for ProcessInfo {
 
 impl ToString for ProcessInfo {
     fn to_string(&self) -> String {
-        format!("{},{},{},{}", self.name, self.pid, self.resident_memory, self.virtual_memory)
+        format!("{},{},{},{},{},{},{}", self.name, self.cmd, self.parent, self.start_time, self.pid, self.resident_memory, self.virtual_memory)
     }
 }
 
